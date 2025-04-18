@@ -15,7 +15,7 @@ const extensionFolder = path.join(
 );
 
 export function useICloudStorage<T>(key: string, initialValue?: T): {
-  value: Awaited<T> | undefined;
+  value: T | undefined;
   setValue: (value: T) => Promise<void>;
   isLoading: boolean;
 } {
