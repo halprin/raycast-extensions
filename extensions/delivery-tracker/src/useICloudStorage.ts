@@ -3,7 +3,6 @@ import { useEffect, useState, useRef } from "react";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
-import fsSync from "node:fs";
 import crypto from "node:crypto";
 
 const extensionFolder = path.join(
@@ -41,29 +40,52 @@ export function useICloudStorage<T>(key: string, initialValue?: T): {
 
   useEffect(() => {
     setIsLoading(true);
+    const abortController = new AbortController();
+    const { signal } = abortController;
+    const identifier = crypto.randomUUID();
 
-    ensureStorageFileAccessible().then(async () => {
-      const initialValueLoadedFromIcloud = await readFromStorageFile();
-      setValue(initialValueLoadedFromIcloud);
-    }).finally(() => setIsLoading(false));
+    (async () => {
+      try {
+        console.log(`Loading initial value with ID ${identifier}`);
+        //TODO: somewhere in here, when I edit the file, the new value is loaded (good), but then when I go away from the extension and come back, the original value is back and the file written reverts to the original file too (bad).
+        await ensureStorageFileAccessible();
+        const initialValueLoadedFromIcloud = await readFromStorageFile();
+        setValue(initialValueLoadedFromIcloud);
 
-    //TODO: without the folder/file structure existing, this below command throws an exception.  Need to somehow kill the watcher on offload but also call ensure the file structure exists beforehand.
-    //TODO: Maybe somehow use the async version of watcher?
-    const watcher = fsSync.watch(extensionFolder, { persistent: true},  async (evt, filename) => {
-      if (filename !== path.basename(storageFilePath)) {
-        return;
+        const watcher = fs.watch(extensionFolder, { persistent: false, signal });
+
+        for await (const { filename } of watcher) {
+          console.log(`Watch triggered for ID ${identifier}`);
+          if (filename !== path.basename(storageFilePath)) {
+            continue;
+          }
+
+          const currentHash = await hashOfStorageFile();
+          if (currentHash === lastHash.current) {
+            continue;
+          }
+
+          const newValue = await readFromStorageFile();
+          setValue(newValue);
+        }
+        console.log(`right outside the for await loop for ID ${identifier}`)
+      } catch (error: unknown) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log(`Watch aborted for ID ${identifier}`);
+          return;
+        }
+        console.error('Watch error:', error, 'for ID', identifier);
+        throw error;
+      } finally {
+        console.log(`Loading done for ID ${identifier}`);
+        setIsLoading(false);
       }
+    })();
 
-      const currentHash = await hashOfStorageFile();
-      if (currentHash === lastHash.current) {
-        return;
-      }
-
-      const newValue = await readFromStorageFile();
-      setValue(newValue);
-    });
-
-    return () => watcher.close();
+    return () => {
+      console.log(`Cleaning up watch with ID ${identifier}`);
+      abortController.abort();
+    };
   }, []);
 
   useEffect(() => {
