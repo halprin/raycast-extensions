@@ -26,13 +26,14 @@ import { useEffect, useState } from "react";
 import TrackNewDeliveryAction from "./views/TrackNewDeliveryAction";
 import ShowDetailsView from "./views/ShowDetailsView";
 import EditDeliveryView from "./views/EditDeliveryView";
+import { useICloudStorage } from "./useIcloudStorage";
 
 export default function TrackDeliveriesCommand() {
   const {
     value: deliveries,
     setValue: setDeliveries,
     isLoading,
-  } = useLocalStorage<Delivery[]>("deliveries", environment.isDevelopment ? debugDeliveries : []);
+  } = useICloudStorage<Delivery[]>("deliveries", environment.isDevelopment ? debugDeliveries : []);
 
   const [packages, setPackages] = useCachedState<PackageMap>(
     "packages",
